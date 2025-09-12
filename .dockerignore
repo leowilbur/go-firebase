@@ -1,0 +1,7 @@
+*.md
+*.go
+**/*.go
+_resources
+_examples
+go.*
+lib_test.go
