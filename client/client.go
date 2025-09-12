@@ -1,15 +1,11 @@
 package firebase_client
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"strconv"
-	"strings"
 	"time"
 
 	firebase_api "github.com/leowilbur/go-firebase/api"
@@ -22,44 +18,6 @@ type FireBaseClient struct {
 	Client *http.Client
 	Device *firebase_api.FirebaseDevice
 	MTalk  *MTalkCon
-}
-
-// httpRequestToCurl converts an HTTP request to a curl command string
-func httpRequestToCurl(req *http.Request) string {
-	var curlCmd strings.Builder
-	curlCmd.WriteString("curl")
-
-	// Add method
-	if req.Method != "GET" {
-		curlCmd.WriteString(fmt.Sprintf(" -X %s", req.Method))
-	}
-
-	// Add headers
-	for name, values := range req.Header {
-		for _, value := range values {
-			curlCmd.WriteString(fmt.Sprintf(" -H '%s: %s'", name, value))
-		}
-	}
-
-	// Add body if present
-	if req.Body != nil {
-		bodyBytes, err := io.ReadAll(req.Body)
-		if err == nil && len(bodyBytes) > 0 {
-			// Restore the body for the actual request
-			req.Body = io.NopCloser(bytes.NewReader(bodyBytes))
-
-			// Add the body to curl command
-			bodyStr := string(bodyBytes)
-			// Escape single quotes in the body
-			bodyStr = strings.ReplaceAll(bodyStr, "'", "'\"'\"'")
-			curlCmd.WriteString(fmt.Sprintf(" -d '%s'", bodyStr))
-		}
-	}
-
-	// Add URL
-	curlCmd.WriteString(fmt.Sprintf(" '%s'", req.URL.String()))
-
-	return curlCmd.String()
 }
 
 func NewFirebaseClient(client *http.Client, device *firebase_api.FirebaseDevice) (*FireBaseClient, error) {
@@ -90,9 +48,6 @@ func (c *FireBaseClient) NotifyInstallation(ctx context.Context, appData *fireba
 	if err != nil {
 		return nil, fmt.Errorf("api.NotifyInstallationRequest: %w", err)
 	}
-
-	// Log the request as curl command
-	log.Printf("Request as curl: %s", httpRequestToCurl(req))
 
 	resp, err := c.Client.Do(req)
 	if err != nil {
@@ -136,9 +91,6 @@ func (c *FireBaseClient) VerifyPassword(ctx context.Context, data *firebase_api.
 	if err != nil {
 		return nil, fmt.Errorf("api.VerifyPasswordRequest: %w", err)
 	}
-
-	// Log the request as curl command
-	log.Printf("Request as curl: %s", httpRequestToCurl(req))
 
 	resp, err := c.Client.Do(req)
 	if err != nil {
@@ -221,9 +173,6 @@ func (c *FireBaseClient) Auth(ctx context.Context, appData *firebase_api.Firebas
 		return nil, fmt.Errorf("api.AuthRequest: %w", err)
 	}
 
-	// Log the request as curl command
-	log.Printf("Request as curl: %s", httpRequestToCurl(req))
-
 	resp, err := c.Client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("c.Client.Do: %w", err)
@@ -241,9 +190,6 @@ func (c *FireBaseClient) Checkin(ctx context.Context, appData *firebase_api.Fire
 	if err != nil {
 		return nil, fmt.Errorf("api.CheckinAndroidRequest: %w", err)
 	}
-
-	// Log the request as curl command
-	log.Printf("Request as curl: %s", httpRequestToCurl(req))
 
 	resp, err := c.Client.Do(req)
 	if err != nil {
@@ -264,10 +210,6 @@ func (c *FireBaseClient) C2DMRegisterAndroid(ctx context.Context, appData *fireb
 	if err != nil {
 		return "", fmt.Errorf("api.C2DMAndroidRegisterRequest: %w", err)
 	}
-
-	// Log the request as curl command
-	log.Printf("Request as curl: %s", httpRequestToCurl(req))
-
 	resp, err := c.Client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("c.Client.Do: %w", err)
