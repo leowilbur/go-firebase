@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	firebase_api "github.com/leowilbur/go-firebase/api"
 	"github.com/leowilbur/go-firebase/constants"
@@ -305,6 +307,11 @@ func (c *MTalkCon) readMessage() (proto.Message, error) {
 	if err != nil {
 		return nil, fmt.Errorf("c.readBytes data: %w", err)
 	}
+
+	// Log raw hex data received from Firebase server before decoding
+	fmt.Printf("[%s] RAW_HEX_IN: tag=%d length=%d data=%s\n",
+		time.Now().Format(time.RFC3339), tag, length, hex.EncodeToString(data))
+
 	var result proto.Message
 	switch firebase_api.MCSTag(int(tag)) {
 	case firebase_api.MCSTag_MCS_HEARTBEAT_PING_TAG:
@@ -336,17 +343,30 @@ func (c *MTalkCon) readMessage() (proto.Message, error) {
 		return nil, fmt.Errorf("proto.Unmarshal[%x]: %w", data, err)
 	}
 
+	// Log decoded message as JSON
+	if jsonData, jsonErr := json.MarshalIndent(result, "", "  "); jsonErr == nil {
+		fmt.Printf("[%s] DECODED_IN: %s\n", time.Now().Format(time.RFC3339), string(jsonData))
+	}
+
 	c.streamId++
-	// fmt.Println("IO:IN:\n", spew.Sdump(result))
 	return result, nil
 }
 
 func (c *MTalkCon) writeMessage(tag firebase_api.MCSTag, message proto.Message) error {
-	// fmt.Println("IO:OUT:\n", spew.Sdump(message))
+	// Log outgoing message as JSON before encoding
+	if jsonData, jsonErr := json.MarshalIndent(message, "", "  "); jsonErr == nil {
+		fmt.Printf("[%s] DECODED_OUT: tag=%d message=%s\n", time.Now().Format(time.RFC3339), int(tag), string(jsonData))
+	}
+
 	protoBytes, err := proto.Marshal(message)
 	if err != nil {
 		return fmt.Errorf("proto.Marshal: %w", err)
 	}
+
+	// Log raw hex data being sent to Firebase server
+	fmt.Printf("[%s] RAW_HEX_OUT: tag=%d length=%d data=%s\n",
+		time.Now().Format(time.RFC3339), int(tag), len(protoBytes), hex.EncodeToString(protoBytes))
+
 	err = c.writeByte(uint8(tag))
 	if err != nil {
 		return fmt.Errorf("c.writeByte[tag]: %w", err)
@@ -447,7 +467,12 @@ func (c *MTalkCon) readBytes(len int) ([]byte, error) {
 	} else {
 		err = nil
 	}
-	// fmt.Println(fmt.Sprintf("%s\tIO:BYTESIN:%s", time.Now().Format(time.RFC3339), hex.EncodeToString(result)))
+
+	// Log raw bytes received from network
+	if err == nil {
+		fmt.Printf("[%s] NETWORK_BYTES_IN: %s\n", time.Now().Format(time.RFC3339), hex.EncodeToString(buf))
+	}
+
 	return buf, err
 }
 
@@ -463,10 +488,11 @@ func (c *MTalkCon) readByte() (byte, error) {
 }
 
 func (c *MTalkCon) writeBytes(data []byte) error {
-	// fmt.Println(fmt.Sprintf("%s\tIO:BYTESOUT:%s", time.Now().Format(time.RFC3339), hex.EncodeToString(data)))
+	// Log raw bytes being sent to network
+	fmt.Printf("[%s] NETWORK_BYTES_OUT: %s\n", time.Now().Format(time.RFC3339), hex.EncodeToString(data))
+
 	_, err := c.RawConn.Write(data)
 	if err != nil {
-		// return fmt.Errorf("c.IO.WriteMessage: %w", err)
 		return fmt.Errorf("c.RawConn.Write: %w", err)
 	}
 	return nil

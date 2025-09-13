@@ -85,106 +85,7 @@ func NewFakeMTalk(fileName string) (*FakeMTalk, error) {
 	}, nil
 }
 
-func TestMBBankNativePushNotifications(t *testing.T) {
-	// POST: https://firebaseinstallations.googleapis.com/v1/projects/shopeepay-aca0a/installations
-	// {
-	//   "fid": "fR4kVgAsRr6Nw2TyVLw0Lm",
-	//   "appId": "1:1072576719353:android:d92c493cdbd7aa81387528",
-	//   "authVersion": "FIS_v2",
-	//   "sdkVersion": "a:17.2.0"
-	// }
-	// POST: https://android.apis.google.com/c2dm/register3
-	// X-subtype=1072576719353&sender=1072576719353&X-app_ver=34100&X-osv=29&X-cliv=fiid-21.1.0&X-gmsv=252234013&X-appid=fR4kVgAsRr6Nw2TyVLw0Lm&X-scope=*&X-Goog-Firebase-Installations-Auth=eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBJZCI6IjE6MTA3MjU3NjcxOTM1MzphbmRyb2lkOmQ5MmM0OTNjZGJkN2FhODEzODc1MjgiLCJleHAiOjE3NTA1NjI4NTgsImZpZCI6ImZSNGtWZ0FzUnI2TncyVHlWTHcwTG0iLCJwcm9qZWN0TnVtYmVyIjoxMDcyNTc2NzE5MzUzfQ.AB2LPV8wRQIgNouSlBHr63GCDvVNruNDodeNRyXe80-wZY5uDRPGWRUCIQCG2dvripr_ZYYCMr_EJeVDtEi6mo5ixiHS_Mt350_QKg&X-gmp_app_id=1%3A1072576719353%3Aandroid%3Ad92c493cdbd7aa81387528&X-firebase-app-name-hash=R1dAH9Ui7M-ynoznwBdw01tLxhI&X-app_ver_name=3.41.0&app=com.shopeepay.merchant.vn&device=4369926941067030122&app_ver=34100&info=44JFlWbqrlQZUE1VIFLpkGgyTnAnbhk&gcm_ver=252234013&plat=0&cert=5c85fff9bcfe8d2da4700256f45abd2be210a31e&target_ver=34
-
-	ctx := context.Background()
-	device := andutils.GetRandomDevice()
-
-	fmt.Println(device.Id.ToHexString())
-	fmt.Println(device.MacAddress.Address)
-	fmt.Println(device)
-
-	appData := &firebase_api.FirebaseAppData{
-		PackageID:            "com.mbbank.biz.prod",
-		PackageCertificate:   "62D1D47E8927439E53F9FA7D616CF2ADF2AFCD6F",
-		GoogleAPIKey:         "AIzaSyDj3A3Moh7qNyZitu7a8mFaYYJtTvLsTa0",
-		FirebaseProjectID:    "new-biz-live",
-		GMPAppID:             "1:819581859985:android:664b3ea0721f76db8f6730",
-		NotificationSenderID: "819581859985",                // sender
-		AppVersion:           "1.0.91",                      // X-app_ver_name
-		AppVersionWithBuild:  "111",                         // X-app_ver
-		AuthVersion:          "FIS_v2",                      // authVersion
-		SdkVersion:           "a:17.1.4",                    // sdkVersion
-		AppNameHash:          "R1dAH9Ui7M-ynoznwBdw01tLxhI", // X-firebase-app-name-hash
-	}
-	fDevice := &firebase_api.FirebaseDevice{
-		Device:                device,
-		CheckinAndroidID:      0,
-		CheckinSecurityToken:  0,
-		GmsVersion:            "252431013",  // gcm_ver
-		FirebaseClientVersion: "fcm-22.0.0", // X-cliv
-	}
-
-	hClient, err := gokhttp.TestHTTPClient()
-	if err != nil {
-		t.Error(err)
-	}
-
-	fClient, err := NewFirebaseClient(hClient, fDevice)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = fClient.NotifyInstallation(ctx, appData)
-	if err != nil {
-		t.Error(err)
-	}
-
-	time.Sleep(time.Second * 1)
-
-	checkinResult, err := fClient.Checkin(ctx, appData, "", "")
-	if err != nil {
-		t.Error(err)
-	}
-	fmt.Println(fmt.Sprintf("AndroidID (checkin): %d\nSecurityToken: %d", checkinResult.AndroidId, checkinResult.SecurityToken))
-	time.Sleep(time.Second * 1)
-
-	result, err := fClient.C2DMRegisterAndroid(ctx, appData)
-	if err != nil {
-		t.Error(err)
-	}
-
-	fmt.Println("notificationToken: \n", result)
-
-	time.Sleep(time.Second * 3) // it will error out if we don't wait, there is a latency between checkin credentials being registered with gcm/fcm and being registered with mtalk
-
-	err = fClient.MTalk.Connect()
-	if err != nil {
-		t.Error(err)
-	}
-
-	time.Sleep(time.Second * 3)
-	resultChan := make(chan *firebase_api.DataMessageStanza)
-	fClient.MTalk.OnNotification = func(notification *firebase_api.DataMessageStanza) {
-		resultChan <- notification
-	}
-	fmt.Println("Waiting for messages...")
-	for {
-		msg := <-resultChan
-		buff, _ := json.MarshalIndent(msg, "", "    ")
-		fmt.Printf("\nReceived message at %s:\n%s\n", time.Now().Format(time.RFC3339), string(buff))
-	}
-}
-
 func TestNativePushNotifications(t *testing.T) {
-	// POST: https://firebaseinstallations.googleapis.com/v1/projects/shopeepay-aca0a/installations
-	// {
-	//   "fid": "fR4kVgAsRr6Nw2TyVLw0Lm",
-	//   "appId": "1:1072576719353:android:d92c493cdbd7aa81387528",
-	//   "authVersion": "FIS_v2",
-	//   "sdkVersion": "a:17.2.0"
-	// }
-	// POST: https://android.apis.google.com/c2dm/register3
-	// X-subtype=1072576719353&sender=1072576719353&X-app_ver=34100&X-osv=29&X-cliv=fiid-21.1.0&X-gmsv=252234013&X-appid=fR4kVgAsRr6Nw2TyVLw0Lm&X-scope=*&X-Goog-Firebase-Installations-Auth=eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBJZCI6IjE6MTA3MjU3NjcxOTM1MzphbmRyb2lkOmQ5MmM0OTNjZGJkN2FhODEzODc1MjgiLCJleHAiOjE3NTA1NjI4NTgsImZpZCI6ImZSNGtWZ0FzUnI2TncyVHlWTHcwTG0iLCJwcm9qZWN0TnVtYmVyIjoxMDcyNTc2NzE5MzUzfQ.AB2LPV8wRQIgNouSlBHr63GCDvVNruNDodeNRyXe80-wZY5uDRPGWRUCIQCG2dvripr_ZYYCMr_EJeVDtEi6mo5ixiHS_Mt350_QKg&X-gmp_app_id=1%3A1072576719353%3Aandroid%3Ad92c493cdbd7aa81387528&X-firebase-app-name-hash=R1dAH9Ui7M-ynoznwBdw01tLxhI&X-app_ver_name=3.41.0&app=com.shopeepay.merchant.vn&device=4369926941067030122&app_ver=34100&info=44JFlWbqrlQZUE1VIFLpkGgyTnAnbhk&gcm_ver=252234013&plat=0&cert=5c85fff9bcfe8d2da4700256f45abd2be210a31e&target_ver=34
-
 	ctx := context.Background()
 	device := andutils.GetRandomDevice()
 
@@ -193,24 +94,24 @@ func TestNativePushNotifications(t *testing.T) {
 	fmt.Println(device)
 
 	appData := &firebase_api.FirebaseAppData{
-		PackageID:            "com.shopeepay.merchant.vn",
-		PackageCertificate:   "5C85FFF9BCFE8D2DA4700256F45ABD2BE210A31E",
-		GoogleAPIKey:         "AIzaSyBuMKo0Z17N73NUpqT8WKH3aNwtdmXbU88",
-		FirebaseProjectID:    "shopeepay-aca0a",
-		GMPAppID:             "1:1072576719353:android:d92c493cdbd7aa81387528",
-		NotificationSenderID: "1072576719353",               // sender
-		AppVersion:           "3.41.0",                      // X-app_ver_name
-		AppVersionWithBuild:  "34100",                       // X-app_ver
+		PackageID:            "com.alexbayker.firebasetester",
+		PackageCertificate:   "1B4AA586528C5A74B6A339022B4586E2BA2C1C26",
+		GoogleAPIKey:         "AIzaSyA7e5P9fvswJDF677dTjPt0oYHkqusg-Rs",
+		FirebaseProjectID:    "fb-tester-app",
+		GMPAppID:             "1:932005671425:android:74a12dcf2fe10247c68600",
+		NotificationSenderID: "932005671425",                // sender
+		AppVersion:           "1.0.2.192",                   // X-app_ver_name
+		AppVersionWithBuild:  "192",                         // X-app_ver
 		AuthVersion:          "FIS_v2",                      // authVersion
-		SdkVersion:           "a:17.2.0",                    // sdkVersion
+		SdkVersion:           "a:18.0.0",                    // sdkVersion
 		AppNameHash:          "R1dAH9Ui7M-ynoznwBdw01tLxhI", // X-firebase-app-name-hash
 	}
 	fDevice := &firebase_api.FirebaseDevice{
 		Device:                device,
 		CheckinAndroidID:      0,
 		CheckinSecurityToken:  0,
-		GmsVersion:            "252234013",  // gcm_ver
-		FirebaseClientVersion: "fcm-22.0.0", // X-cliv
+		GmsVersion:            "253434013",  // gcm_ver
+		FirebaseClientVersion: "fcm-24.1.1", // X-cliv
 	}
 
 	hClient, err := gokhttp.TestHTTPClient()
