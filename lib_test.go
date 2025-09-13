@@ -323,8 +323,7 @@ func TestAuthLogin(t *testing.T) {
 	err := godotenv.Load(".env")
 	hClient, err := gokhttp.TestHTTPClient()
 	if err != nil {
-		t.Error(err)
-		panic(err)
+		t.Fatal(err)
 	}
 
 	device := &firebase_api.FirebaseDevice{
@@ -364,8 +363,7 @@ func TestAuthOAUTH(t *testing.T) {
 	err := godotenv.Load(".env")
 	hClient, err := gokhttp.TestHTTPClient()
 	if err != nil {
-		t.Error(err)
-		panic(err)
+		t.Fatal(err)
 	}
 	device := &firebase_api.FirebaseDevice{
 		Device: andutils.GetRandomDevice(),
@@ -410,8 +408,7 @@ func TestNotify(t *testing.T) {
 	err := godotenv.Load(".env")
 	hClient, err := gokhttp.TestHTTPClient()
 	if err != nil {
-		t.Error(err)
-		panic(err)
+		t.Fatal(err)
 	}
 	device := &firebase_api.FirebaseDevice{
 		Device: andutils.GetRandomDevice(),
@@ -441,8 +438,7 @@ func TestVerifyPassword(t *testing.T) {
 	err := godotenv.Load(".env")
 	hClient, err := gokhttp.TestHTTPClient()
 	if err != nil {
-		t.Error(err)
-		panic(err)
+		t.Fatal(err)
 	}
 	device := &firebase_api.FirebaseDevice{
 		Device: andutils.GetRandomDevice(),

@@ -26,7 +26,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-type MTalkMessageProcessor func(message proto.Message)
+type MTalkMessageProcessor func(message proto.Message) error
 type MTalkNotificationProcessor func(notification *firebase_api.DataMessageStanza)
 
 type MTalkCon struct {
@@ -40,6 +40,7 @@ type MTalkCon struct {
 	stop             *atomic.Bool
 	Device           *firebase_api.FirebaseDevice
 	ECEEngine        *ecego.Engine
+	errChan          chan error
 }
 
 const MTalkVersion = byte(41)
@@ -75,7 +76,7 @@ func convertECDHToECDSA(ecdhKey *ecdh.PrivateKey) (*ecdsa.PrivateKey, error) {
 }
 
 func NewMTalkCon(device *firebase_api.FirebaseDevice) (*MTalkCon, error) {
-	result := &MTalkCon{stop: atomic.NewBool(false), Device: device}
+	result := &MTalkCon{stop: atomic.NewBool(false), Device: device, errChan: make(chan error, 1)}
 	result.OnMessage = result.defaultOnMessage
 	result.OnNotification = result.defaultOnNotification
 
@@ -178,20 +179,30 @@ func (c *MTalkCon) Connect() error {
 }
 
 func (c *MTalkCon) loop() {
+	defer c.Done()
 	for {
 		msg, err := c.readMessage()
 		if err != nil {
-			panic(err)
+			select {
+			case c.errChan <- err:
+			default:
+			}
+			return
 		}
-		c.OnMessage(msg)
+		if err := c.OnMessage(msg); err != nil {
+			select {
+			case c.errChan <- err:
+			default:
+			}
+			return
+		}
 		if c.stop.Load() {
 			break
 		}
 	}
-	c.Done()
 }
 
-func (c *MTalkCon) defaultOnMessage(msg proto.Message) {
+func (c *MTalkCon) defaultOnMessage(msg proto.Message) error {
 	switch parsedMsg := msg.(type) {
 	case *firebase_api.HeartbeatPing:
 		response := &firebase_api.HeartbeatAck{
@@ -203,10 +214,8 @@ func (c *MTalkCon) defaultOnMessage(msg proto.Message) {
 		}
 		err := c.writeMessage(firebase_api.MCSTag_MCS_HEARTBEAT_ACK_TAG, response)
 		if err != nil {
-			err = fmt.Errorf("c.writeMessage[PingAck]: %w", err)
-			panic(err)
+			return fmt.Errorf("c.writeMessage[PingAck]: %w", err)
 		}
-		break
 	case *firebase_api.DataMessageStanza:
 		if parsedMsg.PersistentId != nil {
 			c.Device.MTalkLastPersistentId = *parsedMsg.PersistentId
@@ -235,8 +244,7 @@ func (c *MTalkCon) defaultOnMessage(msg proto.Message) {
 				if ok {
 					encryptionParams.Salt, err = base64.RawURLEncoding.DecodeString(saltStr)
 					if err != nil {
-						err = fmt.Errorf("base64.RawURLEncoding.DecodeString[%s:salt]: %w", string(encryptionParams.Version), err)
-						panic(err)
+						return fmt.Errorf("base64.RawURLEncoding.DecodeString[%s:salt]: %w", string(encryptionParams.Version), err)
 					}
 				}
 			}
@@ -247,8 +255,7 @@ func (c *MTalkCon) defaultOnMessage(msg proto.Message) {
 				if ok {
 					encryptionParams.DH, err = base64.RawURLEncoding.DecodeString(dhStr)
 					if err != nil {
-						err = fmt.Errorf("base64.RawURLEncoding.DecodeString[%s:dh]: %w", string(encryptionParams.Version), err)
-						panic(err)
+						return fmt.Errorf("base64.RawURLEncoding.DecodeString[%s:dh]: %w", string(encryptionParams.Version), err)
 					}
 				}
 			}
@@ -271,15 +278,14 @@ func (c *MTalkCon) defaultOnMessage(msg proto.Message) {
 		if encryptionParams.Version != "" {
 			plaintext, err := c.ECEEngine.Decrypt(parsedMsg.RawData, nil, encryptionParams)
 			if err != nil {
-				err = fmt.Errorf("c.ECEEngine.Decrypt[%s]: %w", string(encryptionParams.Version), err)
-				panic(err)
+				return fmt.Errorf("c.ECEEngine.Decrypt[%s]: %w", string(encryptionParams.Version), err)
 			}
 			parsedMsg.RawData = plaintext
 		}
 
 		c.OnNotification(parsedMsg)
-		break
 	}
+	return nil
 }
 
 func (c *MTalkCon) defaultOnNotification(notification *firebase_api.DataMessageStanza) {
@@ -486,4 +492,19 @@ func parseAppDataValue(value string) map[string]string {
 		}
 	}
 	return result
+}
+
+// GetError returns any error from the background loop, non-blocking
+func (c *MTalkCon) GetError() error {
+	select {
+	case err := <-c.errChan:
+		return err
+	default:
+		return nil
+	}
+}
+
+// Stop stops the MTalk connection
+func (c *MTalkCon) Stop() {
+	c.stop.Store(true)
 }
